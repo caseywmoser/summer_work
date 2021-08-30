@@ -1,0 +1,497 @@
+---
+title: "hype"
+author: "Casey Moser"
+date: "6/25/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(runjags)
+library(ProbBayes)
+```
+
+# keep this analysis
+- Put time on X?
+    multiple graphs with time vs variable
+    
+    
+# putting time as X axis
+
+# scale up search by some constant factor?
+
+
+# Fix endogeneity stuff
+# Data files
+
+```{r}
+
+price<- read.csv("BTC_USD_2020-06-25_2021-06-24-CoinDesk.csv")
+
+
+```
+
+The search variable is a measure of media hype based on the weekly number of google searches for the term "bitcoin"
+
+"For the search variable, "numbers represent search interest relative to the highest point on the chart for the given region and time. A value of 100 is the peak popularity for the term. A value of 50 means that the term is half as popular. A score of 0 means there was not enough data for this term."(https://trends.google.com/trends/explore?q=bitcoin&geo=US)
+
+
+```{r}
+head(price)
+```
+
+
+
+```{r}
+fit_1 <- lm(Closing.Price..USD. ~ search,  data = price)
+
+summary(fit_1)
+```
+
+```{r}
+price<-price %>% 
+mutate(search_sq= search^2)
+```
+
+```{r}
+fit_2 <- lm(Closing.Price..USD. ~ search_sq + search,  data = price)
+
+summary(fit_2)
+```
+
+
+
+
+```{r}
+ggplot(data = price, aes(x = search, y = Closing.Price..USD.)) +
+geom_point() +geom_smooth()
+```
+
+
+```{r}
+AIC(fit_1)
+AIC(fit_2)
+```
+Since the quadratic model has a lower AIC value, and the data appears to be spread out quadratically, the quadratic model will be implemented to fit the relationship between hype and bitcoin market price. Interestingly, the fact that the quadratic model appears to have a local maximum value implies that beyond a certain amount of media hype, the market value of bitcoin actually diminishes instead of continuing to increase.
+
+# Inflection Point Calculation
+
+
+```{r}
+# coefficient for quadratic term for first derivative
+(-1.324e+01 )*2 
+
+
+```
+
+
+# First derivative
+dy/dx= -26.48*x + 1.788e+03
+
+
+# Setting dy/dx=0 to find the maximum of the curve
+
+0= -26.48*x + 1.788e+03
+
+
+26.48*x =  1.788e+03
+
+```{r}
+(1.788e+03)/26.48
+```
+
+
+Based on this model, market price of bitcoin increases up until google search popularity reaches a relative value of 67.52, meaning that the term bitcoin is 67.52% as popular as its maximum google search popularity . This model suggests that media hype over bitcoin raises the market price of bitcoin up until a certain point, meaning that increased hype and excitement over bitcoin will not consistently drive up the price of bitcoin. 
+
+
+# All time
+
+```{r}
+price<- read.csv("bitcoin_month_price.csv")
+
+search<- read.csv("search_all.csv")
+
+```
+
+
+```{r}
+library(lubridate)
+library(dplyr)
+
+```
+
+```{r}
+head(price)
+head(search)
+```
+
+It should be noted that the search values for all time data are average search values by month.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+price<-price %>%
+  mutate(
+    Date = mdy(date),
+    Month_Yr = format_ISO8601(Date, precision = "ym"),
+    Year= decimal_date(Date)
+
+  )
+
+head(price)
+
+```
+```{r}
+price<- price %>% 
+  group_by(Month_Yr) %>% 
+  mutate(avg_price= mean(Closing.Price..USD.))
+
+head(price)
+```
+
+
+
+
+
+
+```{r}
+price_hype<- price %>%
+left_join(search) %>%
+select(avg_price, search, Month_Yr)
+
+head(price_hype)
+
+```
+
+
+
+```{r}
+price_hype<-price_hype%>% distinct(Month_Yr, .keep_all = TRUE)
+
+head(price_hype)
+```
+
+```{r}
+
+
+price_hype$search <- as.numeric(as.character(price_hype$search))
+
+```
+
+
+```{r}
+ggplot(data = price_hype, aes(x = search, y = avg_price)) + geom_text(label= price_hype$Month_Yr, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) + geom_smooth()
+```
+
+```{r}
+price_hype<-price_hype %>% 
+mutate(search_sq = search^2)
+```
+
+```{r}
+fit_3 <- lm(avg_price ~ search,  data = price_hype)
+
+summary(fit_3)
+```
+
+```{r}
+fit_3_sq <- lm(avg_price ~ search_sq+ search,  data = price_hype)
+
+summary(fit_3_sq)
+```
+
+```{r}
+AIC(fit_3)
+
+AIC(fit_3_sq)
+
+```
+
+Considering that model appears to have a quadratic distribution and that the quadratic model has a lower AIC  value, the quadratic model is the most appropriate model for the data.
+
+
+# Finding the inflection point
+
+```{r}
+# coefficient for quadratic term for first derivative
+( -7.13  )*2 
+
+
+```
+
+
+# First derivative
+
+dy/dx= -14.26x + 1039.14
+
+
+# Setting setting derivative=0 to find the maximum of the curve
+
+
+0= -14.26x + 1039.14
+ 
+14.26x= 1039.14
+```{r}
+ 1039.14/14.26
+```
+
+x= 72.87097
+
+Based on this model using data from across a wider time-span than the first model, market price of bitcoin increases up until google search popularity reaches a relative value of 72.87, meaning that the term bitcoin is 72.87% as popular as its maximum google search popularity . This model suggests that media hype over bitcoin raises the market price of bitcoin up until a certain point, meaning that increased hype and excitement over bitcoin will not consistently drive up the price of bitcoin. 
+
+
+```{r}
+price_hype <- price_hype %>%
+
+  mutate(log_search= log(search)) %>% 
+
+mutate(log_price= log(avg_price))
+
+```
+
+```{r}
+
+price_hype <- price_hype %>%
+  na_if("-Inf") %>%
+  na.omit
+head(price_hype)
+
+
+```
+
+```{r}
+ggplot(data = price_hype, aes(x = log_search, y =log_price )) + geom_text(label= price_hype$Month_Yr, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+
+```{r}
+ggplot(data = price_hype, aes(x = log_price, y =log_search )) + geom_text(label= price_hype$Month_Yr, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+
+
+```{r}
+library(AER)
+library(REndo)
+```
+
+
+
+
+
+
+```{r}
+fit_log <- lm(log_price ~ log_search,  data = price_hype)
+
+summary(fit_log)
+```
+
+Based on this double log model, a 1% increase in average market price is approximately related to a 153.89% increase in hype for bitcoin.
+
+
+```{r}
+fit_log1 <- lm(log_search ~ log_price,  data = price_hype)
+
+summary(fit_log1)
+```
+
+Based on this double log model, a 1% increase in hype is approximately related to a 55.45% increase in average market price.
+
+# Price impacts search more than search impacts price
+- Explain this relationship
+- do endogeneity test?
+# FIND TEST TO PROVE THIS!
+
+
+
+
+# Predictive Model
+
+# USE THIS CODE TO FIX THE OTHER MODELS
+
+```{r}
+library(tidyverse)
+library(lubridate)
+price_hype<-price_hype %>%
+  mutate(
+        Date = ym(Month_Yr),
+        Year= decimal_date(Date)
+
+   
+
+
+  )
+
+
+
+head(price_hype)
+
+```
+
+
+
+
+
+
+```{r}
+
+price_hype[1,8]
+```
+
+```{r}
+ggplot(data = price_hype, aes(x = Year, y =avg_price ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+```{r}
+base<-price_hype$Year[1]
+library(dplyr)
+price_hype<-price_hype %>% 
+  mutate(Time= Year-base )
+
+head(price_hype)
+
+
+```
+
+```{r}
+ggplot(data = price_hype, aes(x = Time, y =avg_price ))+
+geom_point(size=0.5)+geom_smooth()
+```
+```{r}
+price_hype<-price_hype %>% 
+  mutate(Time_exp=exp(Time))
+```
+
+
+```{r}
+fit_time <- lm(avg_price ~  Time+Time_exp,  data = price_hype)
+
+summary(fit_time)
+```
+
+
+
+```{r}
+# Prediction for 2121
+predict_df <- data.frame(Time= 111) %>% 
+  mutate(Time_exp=exp(Time))
+ price_2121<-predict(fit_time, predict_df, type = "response")
+```
+
+# Logistic Model Prediction FIX THIS OUTCOME
+
+```{r}
+predict_df <- data.frame(avg_price= price_2121)%>%
+mutate(log_price = log(avg_price)) 
+
+
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+
+# Bayesian approximation of future price values
+
+
+```{r}
+price_hype<- price_hype %>% 
+  group_by(Year) %>% 
+  mutate(avg_log_search= mean(log_search)) %>% 
+  mutate(avg_log_price= mean(log_price))
+
+
+head(price_hype)
+```
+```{r}
+library(ProbBayes)
+library(runjags)
+```
+
+```{r}
+modelString <-"
+model {
+## sampling
+for (i in 1:N){
+y[i] ~ dnorm(beta0 + beta1*x_Date[i], phi)
+}
+## priors
+beta0 ~ dnorm(mu0, phi0)
+beta1 ~ dnorm(mu1, phi1)
+phi ~ dgamma(alpha, beta)
+}"
+```
+
+
+```{r}
+Year_num<- as.numeric(price_hype$Year)
+
+y <- price_hype$avg_log_price
+x_Date <- 
+N <- length(y)
+the_data <- list("y" = y, "x_Date" = x_Date, "N" = N,
+"mu0" = 0, "phi0" = 0.0001,
+"mu1" = 0, "phi1" = 0.0001,
+"alpha" = 1, "beta" = 1)
+```
+
+```{r}
+posterior <- run.jags(modelString,
+                      data = the_data,
+                      monitor = c("phi", "beta0", "beta1"),
+                      n.chains = 1,
+                      burnin = 5000,
+                      adapt = 5000,
+                      sample = 10000)
+```
+
+```{r}
+summary(posterior)
+```
+
+
+
+
+Based on this Bayesian approximation, every year after 2013 results in approximately a 0.01290882 unit increase in log market price of bitcoin.
+
+
+
+```{r}
+10.674704+ 100*(0.01290882)
+
+10.674704+ 50*(0.01290882)
+
+
+```
+
+
+
+```{r}
+df_predict <- data.frame(log_price=11.96559)
+Y2121<-predict(fit_log1, df_predict, type = "response")
+
+exp(Y2121)
+
+df_predict <- data.frame(log_price=11.32015)
+Y2071<-predict(fit_log1, df_predict, type = "response")
+
+exp(Y2071)
+
+```
+
+
+Approximate value of search at 2121= 92.53027
+
+Approximate value of search at 2071= 64.69029
+
+
+

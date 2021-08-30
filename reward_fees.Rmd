@@ -1,0 +1,389 @@
+---
+title: "Reward_fees"
+author: "Casey Moser"
+date: "6/20/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Check the time increment between data points
+# try to make time increments constant
+# overlay model with other variables like total transactions sent
+# try to put timestamp in the chart
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(runjags)
+library(ProbBayes)
+library(inflection)
+```
+
+# Data files
+
+```{r}
+cost<- read.csv("cost-per-transaction.csv")
+fees<- read.csv("fees-usd-per-transaction.csv")
+revenue<- read.csv("miners-revenue.csv")
+difficulty<- read.csv("difficulty.csv")
+price<- read.csv("market-price.csv")
+total_fees<- read.csv("transaction-fees-usd.csv")
+total_transaction<- read.csv("n-transactions-total.csv")
+
+```
+
+# Models
+
+
+
+
+
+```{r}
+revenue_fee <- revenue %>%
+left_join(total_fees) %>%
+select(miners.revenue, transaction.fees.usd, Timestamp)
+
+revenue_fee <- revenue_fee %>%
+left_join(total_transaction) %>%
+select(miners.revenue, transaction.fees.usd, n.transactions.total, Timestamp)
+
+revenue_fee <- revenue_fee %>%
+  na_if("") %>%
+  na.omit
+
+```
+
+```{r}
+reward_fee <- revenue_fee %>%
+  mutate(reward= miners.revenue-transaction.fees.usd)
+head(reward_fee)
+
+```
+
+```{r}
+curve<- ggplot(data = reward_fee, aes(x = Timestamp, y = reward)) +
+geom_point() +geom_smooth()
+
+
+print(curve)
+
+
+```
+
+
+
+```{r}
+curve<- ggplot(data = reward_fee, aes(x = transaction.fees.usd, y = reward)) + geom_text(label= reward_fee$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) + geom_smooth()
+
+
+print(curve)
+
+
+```
+
+
+
+
+
+
+
+```{r}
+reward_fee<-reward_fee %>% 
+mutate(fee_sq= transaction.fees.usd^2)
+
+
+```
+
+```{r}
+fit_1 <- lm(reward ~ fee_sq + transaction.fees.usd,  data = reward_fee)
+
+summary(fit_1)
+
+```
+
+```{r}
+fit_1_tot <- lm(reward ~ fee_sq+transaction.fees.usd + n.transactions.total,  data = reward_fee)
+
+summary(fit_1_tot)
+
+```
+
+```{r}
+AIC(fit_1)
+AIC(fit_1_tot)
+```
+
+
+
+The model that includes total number of transaction has a lower AIC value and is, thus, the better fitting model.
+
+# Calculating Maximum point
+```{r}
+# coefficient for quadratic term for first partial  derivative
+(-3.160e-07)*2 
+
+
+```
+
+# First partial derivative
+dy/dx= -6.32e-07*x +6.258e+00
+
+
+# Setting dy/dx=0 to find the maximum of the curve
+
+0= -6.32e-07*x +6.258e+00
+
+6.258e+00=6.32e-07*x
+
+
+
+```{r}
+(6.258e+00)/(6.32e-07)
+```
+
+
+When total transaction fees become greater than $9901899, it is estimated that rewards will start to decrease as transaction fees increase 
+
+Based on this model, in order for the blockchain to be sustained with transaction fees as opposed to block rewards, the total value of transaction fees must be greater than $9901899.
+
+
+# All-time data model
+
+```{r}
+cost<- read.csv("cost-per-transaction_all.csv")
+fees<- read.csv("fees-usd-per-transaction_all.csv")
+revenue<- read.csv("miners-revenue_all.csv")
+difficulty<- read.csv("difficulty_all.csv")
+price<- read.csv("market-price_all.csv")
+total_fees<- read.csv("transaction-fees-usd_all.csv")
+
+total_transaction<- read.csv("n-transactions-total_all.csv")
+
+```
+
+```{r}
+revenue_fee_all <- revenue %>%
+left_join(total_fees) %>%
+select(miners.revenue, transaction.fees.usd, Timestamp)
+
+revenue_fee_all <- revenue_fee_all %>%
+left_join(total_transaction) %>%
+select(miners.revenue, transaction.fees.usd, n.transactions.total, Timestamp)
+
+revenue_fee_all <- revenue_fee_all%>%
+  na_if("") %>%
+  na.omit
+
+head(revenue_fee_all)
+
+```
+
+
+
+```{r}
+reward_fee_all <- revenue_fee_all %>%
+  mutate(reward= miners.revenue-transaction.fees.usd)
+head(reward_fee_all)
+
+```
+
+
+
+
+
+
+```{r}
+reward_fee_all <- revenue_fee_all %>%
+  mutate(reward= miners.revenue-transaction.fees.usd)
+head(reward_fee)
+
+```
+
+```{r}
+curve<- ggplot(data = reward_fee_all, aes(x = transaction.fees.usd, y = reward)) + geom_text(label= reward_fee_all$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) + geom_smooth()
+
+
+print(curve)
+
+
+```
+```{r}
+reward_fee_all<-reward_fee_all %>% 
+mutate(fee_sq= transaction.fees.usd^2)
+
+
+```
+
+```{r}
+fit_2_tot <- lm(reward ~ fee_sq+transaction.fees.usd + n.transactions.total,  data = reward_fee_all)
+
+summary(fit_2_tot)
+
+```
+
+# Calculating Maximum point
+```{r}
+# coefficient for quadratic term for first partial  derivative
+(-2.099e-07 )*2 
+
+
+```
+
+# First partial derivative
+dy/dx=  -4.198e-07*x +5.198e+00
+
+
+# Setting dy/dx=0 to find the maximum of the curve
+
+0=  -4.198e-07*x +5.198e+00
+
+4.198e-07*x=5.198e+00
+
+```{r}
+(5.198e+00)/( 4.198e-07)
+```
+
+
+When total transaction fees become greater than $12,382,087, it is estimated that rewards will start to decrease as transaction fees increase 
+
+Based on this model from all available data, in order for the blockchain to be sustained with transaction fees as opposed to block rewards, the total value of transaction fees must be greater than $12,382,087.
+
+
+# Logarithmic Analysis
+
+```{r}
+reward_fee_all <- reward_fee_all %>%
+
+  mutate(log_reward= log(reward)) %>% 
+
+mutate(log_fee= log(transaction.fees.usd))
+
+```
+
+```{r}
+
+reward_fee_all <- reward_fee_all %>%
+  na_if("-Inf") %>%
+  na.omit
+head(reward_fee_all)
+
+
+```
+```{r}
+curve<- ggplot(data = reward_fee_all, aes(x = log_fee , y = log_reward)) + geom_text(label= reward_fee_all$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) + geom_smooth()
+
+
+print(curve)
+
+
+```
+
+```{r}
+fit_log <- lm(log_reward ~ log_fee,  data = reward_fee_all)
+
+summary(fit_log)
+```
+
+
+Based on this double log model, a 1% increase in transaction fees is approximately related to a 51.51% increase in reward.
+
+
+
+
+
+
+
+# Predictive Model
+
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+reward_fee_all<-reward_fee_all %>%
+  mutate(
+    Date = ymd_hms(Timestamp),
+    Year= decimal_date(Date)
+
+
+  )
+
+
+
+head(reward_fee_all)
+
+```
+
+
+
+
+
+```{r}
+ggplot(data = reward_fee_all, aes(x = Date, y = transaction.fees.usd ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+
+
+
+
+
+```{r}
+library(dplyr)
+base<-reward_fee_all$Year[1]
+reward_fee_all<-reward_fee_all %>% 
+  mutate(Time= Year-base)
+
+
+```
+
+```{r}
+ggplot(data = reward_fee_all, aes(x = Time, y =transaction.fees.usd ))+
+geom_point(size=0.5)+geom_smooth()
+```
+```{r}
+reward_fee_all<-reward_fee_all %>% 
+  mutate(Time_exp=exp(Time))
+```
+
+
+```{r}
+fit_time <- lm(transaction.fees.usd ~  Time+Time_exp,  data = reward_fee_all)
+
+summary(fit_time)
+```
+
+
+
+```{r}
+# Prediction for 2121
+predict_df <- data.frame(Time= 111) %>% 
+  mutate(Time_exp=exp(Time))
+ fee_2121<-predict(fit_time, predict_df, type = "response")
+```
+
+# Logistic Model Prediction
+```{r}
+predict_df <- data.frame(transaction.fee.usd= fee_2121)%>%
+mutate(log_fee = log(transaction.fee.usd)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+Based on this model, block rewards will be $7.27016e+29 in 2121
+
+
+
+
