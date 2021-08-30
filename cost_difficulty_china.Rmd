@@ -1,0 +1,399 @@
+---
+title: "cost_difficulty_china"
+author: "Casey Moser"
+date: "7/26/2021"
+output: pdf_document
+---
+
+
+
+---
+title: "Impact of Network Difficulty on Transaction Costs for Miners"
+author: "Casey Moser"
+date: "6/11/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Try running data back to further (maximizee length of data), keep both but add another
+
+# Change cost variable label to be revenue per transaction for miners
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(runjags)
+library(ProbBayes)
+```
+
+
+
+
+
+# Data files
+
+```{r}
+cost<- read.csv("cost-per-transaction_chin.csv")
+fees<- read.csv("fees-usd-per-transaction_chin.csv")
+revenue<- read.csv("miners-revenue_chin.csv")
+difficulty<- read.csv("difficulty_chin.csv")
+price<- read.csv("market-price_chin.csv")
+
+
+```
+
+
+
+
+```{r}
+cost_difficulty_all <- cost %>%
+full_join(difficulty) %>%
+select(difficulty, cost.per.transaction, Timestamp)
+
+
+
+head(cost_difficulty_all)
+
+
+```
+
+```{r}
+cost_difficulty_all <- cost_difficulty_all %>%
+arrange(Timestamp)
+
+head(cost_difficulty_all)
+
+```
+
+```{r}
+
+ind <- which(is.na(cost_difficulty_all$difficulty))
+cost_difficulty_all$difficulty[ind] <- sapply(ind, function(i) with(cost_difficulty_all, mean(c(difficulty[i-1], difficulty[i+1]))))
+
+head(cost_difficulty_all)
+
+
+```
+
+```{r}
+ind <- which(is.na(cost_difficulty_all$cost.per.transaction))
+cost_difficulty_all$cost.per.transaction[ind] <- sapply(ind, function(i) with(cost_difficulty_all, mean(c(cost.per.transaction[i-1], cost.per.transaction[i+1]))))
+
+tail(cost_difficulty_all)
+
+```
+
+
+```{r}
+
+cost_difficulty_all <- cost_difficulty_all %>%
+  na_if("") %>%
+  na.omit
+
+head(cost_difficulty_all)
+
+```
+
+```{r}
+cost_difficulty_all<-cost_difficulty_all %>% 
+  
+rename(revenue.per.transaction = cost.per.transaction)
+
+head(cost_difficulty_all)
+
+```
+
+
+
+#  Model of Cost and Difficulty for all data points
+
+The model below outlines the relationship of the difficulty of mining a new block for the bitcoin blockchain on the miners' revenue per bitcoin transaction.
+
+```{r}
+ggplot(data = cost_difficulty_all, aes(x = difficulty, y = revenue.per.transaction)) + geom_text(label= cost_difficulty_all$Timestamp, size=3, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+
+```{r}
+cost_difficulty_all<- cost_difficulty_all %>% 
+mutate(difficulty_sq= difficulty^2) %>% 
+mutate(difficulty_cu= difficulty^3) %>% 
+  mutate(difficulty_4th= difficulty^4) %>% 
+   mutate(difficulty_5th= difficulty^5)
+
+```
+
+
+```{r}
+fit_2 <- lm(revenue.per.transaction ~ difficulty,  data = cost_difficulty_all)
+
+summary(fit_2)
+```
+
+```{r}
+cost_difficulty_all<-cost_difficulty_all %>% 
+mutate(difficulty_sq= difficulty^2) %>% 
+mutate(difficulty_cu= difficulty^3) %>% 
+  mutate(difficulty_4th= difficulty^4) %>% 
+   mutate(difficulty_5th= difficulty^5)
+```
+
+```{r}
+fit_2_sq <- lm(revenue.per.transaction ~ difficulty_sq + difficulty,  data = cost_difficulty_all)
+
+summary(fit_2_sq)
+```
+
+```{r}
+fit_2_cu <- lm(revenue.per.transaction ~ difficulty_cu + difficulty_sq + difficulty,  data = cost_difficulty_all)
+
+summary(fit_2_cu)
+```
+
+```{r}
+fit_2_4th <- lm(revenue.per.transaction ~ difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = cost_difficulty_all)
+
+summary(fit_2_4th)
+```
+
+```{r}
+fit_2_5th <- lm(revenue.per.transaction ~ difficulty_5th + difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = cost_difficulty_all)
+
+summary(fit_2_5th)
+```
+
+```{r}
+AIC(fit_2)
+AIC(fit_2_sq)
+AIC(fit_2_cu)
+AIC(fit_2_4th)
+AIC(fit_2_5th)
+
+```
+
+4th power polynomial model appears to be better fitting since it has the lowest AIC value. Considering that the AIC values for the 4th and 5th power model are so similar, I will err on the side of parsimony and choose the 4th power polynomial model.
+
+
+
+# Inflection Points
+
+
+```{r}
+# coefficient for 4th power term for first derivative
+x_4<-(-5.475e-51)*4
+
+# coefficient for cubic term for first derivative
+x_3<-( 3.219e-37)*3 
+
+# coefficient for quadratic term for first derivative
+
+x_2<-( -5.586e-24)*2
+
+```
+
+
+
+
+# Second derivative
+
+```{r}
+
+# coefficient for cubic term of second derivative
+(x_4)*3
+
+# coefficient for quadratic term of second derivative
+(x_3)*2 
+
+x_2
+
+
+```
+
+-6.57e-50*x^2 + 1.9314e-36*x -1.1172e-23
+
+# Setting setting derivative=0 to find the inflection point of the curve
+
+0= -6.57e-50*x^2 + 1.9314e-36*x -1.1172e-23
+
+```{r}
+
+quadraticRoots <- function(a, b, c) {
+
+  print(paste0("You have chosen the quadratic equation ", a, "x^2 + ", b, "x + ", c, "."))
+
+  discriminant <- (b^2) - (4*a*c)
+
+  if(discriminant < 0) {
+    return(paste0("This quadratic equation has no real numbered roots."))
+  }
+  else if(discriminant > 0) {
+    x_int_plus <- (-b + sqrt(discriminant)) / (2*a)
+    x_int_neg <- (-b - sqrt(discriminant)) / (2*a)
+
+    return(paste0("The two x-intercepts for the quadratic equation are ",
+                  format(round(x_int_plus, 5), nsmall = 5), " and ",
+                  format(round(x_int_neg, 5), nsmall = 5), "."))
+  }
+  else #discriminant = 0  case
+    x_int <- (-b) / (2*a)
+    return(paste0("The quadratic equation has only one root. This root is ",
+                  x_int))
+}
+
+```
+
+```{r}
+
+quadraticRoots(-6.57e-50, 1.9314e-36, -1.1172e-23 )
+
+```
+inflection points are at  7.916e+12  and 2.148126e+13
+
+
+
+
+# Log analysis
+
+
+```{r}
+cost_difficulty_all <- cost_difficulty_all %>%
+
+  mutate(log_diff= log(difficulty)) %>% 
+
+mutate(log_rev= log(revenue.per.transaction))
+
+```
+
+```{r}
+
+cost_difficulty_all <- cost_difficulty_all %>%
+  na_if("-Inf") %>%
+  na.omit
+head(cost_difficulty_all)
+
+
+```
+```{r}
+ggplot(data = cost_difficulty_all, aes(x = log_diff, y =log_rev )) + geom_text(label= cost_difficulty_all$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+```{r}
+cost_difficulty_all<- cost_difficulty_all %>% 
+mutate(log_diff_sq=log_diff^2)
+```
+
+
+
+
+```{r}
+fit_log <- lm(log_rev ~ log_diff,  data = cost_difficulty_all)
+
+
+
+summary(fit_log)
+
+```
+# Relationship between miner transaction revenue and difficulty
+
+Based on this double log model, a 1% increase in difficulty is approximately related to a 13.46% increase in revenue per transaction.
+
+
+
+
+# Predictive Model
+
+
+
+# USE THIS CODE TO FIX THE OTHER MODELS
+
+```{r}
+library(tidyverse)
+library(lubridate)
+cost_difficulty_all<-cost_difficulty_all %>%
+  mutate(
+    Date = ymd_hms(Timestamp),
+    Year= decimal_date(Date)
+   
+
+
+  )
+
+
+
+head(cost_difficulty_all)
+
+```
+
+
+
+
+
+
+
+```{r}
+ggplot(data = cost_difficulty_all, aes(x = Year, y =difficulty ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+
+```{r}
+base<-cost_difficulty_all$Year[1]
+library(dplyr)
+cost_difficulty_all<-cost_difficulty_all %>% 
+  mutate(Time= Year-base )
+
+
+
+```
+
+```{r}
+ggplot(data = cost_difficulty_all, aes(x = Time, y =difficulty ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+```{r}
+cost_difficulty_all<-cost_difficulty_all %>% 
+  mutate(Time_exp=exp(Time))
+```
+
+
+```{r}
+fit_time <- lm(difficulty ~  Time+Time_exp,  data = cost_difficulty_all)
+
+summary(fit_time)
+```
+
+
+
+```{r}
+# Prediction for 2121
+predict_df <- data.frame(Time= 111) %>% 
+  mutate(Time_exp=exp(Time))
+ diff_2121<-predict(fit_time, predict_df, type = "response")
+```
+
+# Logistic Model Prediction
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2121)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+
+
+Based on the logistic model, the predicted revenue per transaction for miners is $31543417
+
+
+
+

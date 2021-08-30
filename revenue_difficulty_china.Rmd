@@ -1,0 +1,431 @@
+---
+title: "revenue_difficulty_china"
+author: "Casey Moser"
+date: "7/28/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(runjags)
+library(ProbBayes)
+```
+
+
+
+## All-time analysis
+
+
+
+# Data files
+
+```{r}
+cost<- read.csv("cost-per-transaction_chin.csv")
+fees<- read.csv("fees-usd-per-transaction_chin.csv")
+revenue<- read.csv("miners-revenue_chin.csv")
+difficulty<- read.csv("difficulty_chin.csv")
+price<- read.csv("market-price_chin.csv")
+
+
+```
+
+
+```{r}
+revenue_difficulty_all <- revenue %>%
+full_join(difficulty) %>%
+select(difficulty, miners.revenue, Timestamp)
+
+
+
+revenue_difficulty_all <- revenue_difficulty_all %>%
+arrange(Timestamp)
+
+head(revenue_difficulty_all)
+
+```
+```{r}
+ind <- which(is.na(revenue_difficulty_all$difficulty))
+revenue_difficulty_all$difficulty[ind] <- sapply(ind, function(i) with(revenue_difficulty_all, mean(c(difficulty[i-1], difficulty[i+1]))))
+
+head(revenue_difficulty_all)
+
+```
+```{r}
+ind <- which(is.na(revenue_difficulty_all$miners.revenue))
+revenue_difficulty_all$miners.revenue[ind] <- sapply(ind, function(i) with(revenue_difficulty_all, mean(c(miners.revenue[i-1], miners.revenue[i+1]))))
+
+tail(revenue_difficulty_all)
+
+```
+
+
+```{r}
+
+revenue_difficulty_all <- revenue_difficulty_all %>%
+  na_if("") %>%
+  na.omit
+
+head(revenue_difficulty_all)
+
+```
+
+#  Model of Revenue and Difficulty for all data points
+
+The model below outlines the relationship of the difficulty of mining a new block for the bitcoin blockchain on the miners' revenue per bitcoin transaction.
+
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = Timestamp, y = miners.revenue)) +
+geom_point(size=0.5) +geom_smooth()
+```
+
+
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = Timestamp, y = difficulty)) +
+geom_point(size=0.5) +geom_smooth()
+
+```
+
+
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = difficulty, y = miners.revenue)) + geom_text(label= revenue_difficulty_all$Timestamp, size=3, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+```{r}
+revenue_difficulty_all<-revenue_difficulty_all %>% 
+mutate(difficulty_sq= difficulty^2) %>% 
+mutate(difficulty_cu= difficulty^3) %>% 
+  mutate(difficulty_4th= difficulty^4) %>% 
+   mutate(difficulty_5th= difficulty^5)
+```
+
+```{r}
+fit_2_cu <- lm(miners.revenue ~  difficulty_cu + difficulty_sq + difficulty,  data = revenue_difficulty_all)
+
+summary(fit_2_cu)
+```
+
+```{r}
+fit_2_4th <- lm(miners.revenue ~ difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = revenue_difficulty_all)
+
+summary(fit_2_4th)
+```
+```{r}
+fit_2_5th <- lm(miners.revenue ~ difficulty_5th + difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = revenue_difficulty_all)
+
+summary(fit_2_5th)
+```
+
+
+```{r}
+AIC(fit_2_cu)
+AIC(fit_2_4th)
+AIC(fit_2_5th)
+```
+
+
+4th power polynomial model appears to be better fitting since it has the lowest AIC value. Considering that the AIC values for the 4th and 5th power model are so similar, I will err on the side of parsimony and choose the 4th power polynomial model.
+
+# Inflection Points
+
+```{r}
+# coefficient for 4th power term for second derivative
+cu<-(-1.580e-45)*4*3
+
+# coefficient for cubic term for second derivative
+qua<-(8.970e-32 )*3*2
+
+# coefficient for quadratic term for second derivative
+
+lin<-(-1.524e-18)*2*1
+
+
+
+
+
+
+```
+
+
+# Setting setting derivative=0 to find the inflection point of the curve
+
+
+```{r}
+
+quadraticRoots <- function(a, b, c) {
+
+  print(paste0("You have chosen the quadratic equation ", a, "x^2 + ", b, "x + ", c, "."))
+
+  discriminant <- (b^2) - (4*a*c)
+
+  if(discriminant < 0) {
+    return(paste0("This quadratic equation has no real numbered roots."))
+  }
+  else if(discriminant > 0) {
+    x_int_plus <- (-b + sqrt(discriminant)) / (2*a)
+    x_int_neg <- (-b - sqrt(discriminant)) / (2*a)
+
+    return(paste0("The two x-intercepts for the quadratic equation are ",
+                  format(round(x_int_plus, 5), nsmall = 5), " and ",
+                  format(round(x_int_neg, 5), nsmall = 5), "."))
+  }
+  else #discriminant = 0  case
+    x_int <- (-b) / (2*a)
+    return(paste0("The quadratic equation has only one root. This root is ",
+                  x_int))
+}
+
+```
+
+```{r}
+
+quadraticRoots(cu, qua, lin)
+
+```
+
+The two inflection points for the model exist when network difficulty=7.814728e+12  and network difficulty=2.057135e+13
+
+# Log analysis
+
+
+```{r}
+revenue_difficulty_all<-revenue_difficulty_all %>% 
+
+  mutate(log_diff= log(difficulty)) %>% 
+
+mutate(log_rev= log(miners.revenue))
+
+```
+
+```{r}
+
+revenue_difficulty_all<-revenue_difficulty_all %>% 
+  na_if("-Inf") %>%
+  na.omit
+head(revenue_difficulty_all)
+
+
+```
+# GOOD ANALYSIS
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = log_diff, y =log_rev )) + geom_text(label= revenue_difficulty_all$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+```{r}
+fit_log <- lm(log_rev ~ log_diff,  data = revenue_difficulty_all)
+
+summary(fit_log)
+```
+
+
+# Relationship between revenue and difficulty
+
+# IMPORTANT ANALYSIS
+
+Based on this double log model, a 1% increase in difficulty is approximately related to a 35.99% increase in miner revenue.
+
+
+# Predict future revenue 
+
+- Predict future difficulty values based on time vs difficulty regression
+- Take difficulty values and insert into log model
+
+
+# Predictive Model
+
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+revenue_difficulty_all<-revenue_difficulty_all %>%
+  mutate(
+    Date = ymd_hms(Timestamp),
+    Year= decimal_date(Date)
+
+
+  )
+
+
+
+head(revenue_difficulty_all)
+
+```
+
+
+
+
+
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = Date, y =difficulty ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+
+
+
+
+
+```{r}
+library(dplyr)
+revenue_difficulty_all<-revenue_difficulty_all %>% 
+  mutate(Time= Year-Year[1])
+
+
+```
+
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = Time, y =difficulty ))+
+geom_point(size=0.5)+geom_smooth()
+```
+```{r}
+ggplot(data = revenue_difficulty_all, aes(x = Time, y =log_diff ))+
+geom_point(size=0.5)+geom_smooth()
+```
+```{r}
+revenue_difficulty_all<-revenue_difficulty_all %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4) %>% 
+   mutate(Time_5th=Time^5) %>% 
+     mutate(Time_6th=Time^6) %>% 
+
+  mutate(Time_exp=abs(exp(Time)))
+                      
+```
+
+
+```{r}
+fit_time1 <- lm(difficulty ~  Time+Time_exp,  data = revenue_difficulty_all)
+fit_time2 <- lm(difficulty ~  Time+Time_sq+Time_exp,  data = revenue_difficulty_all)
+fit_time3 <- lm(difficulty ~  Time+Time_sq+Time_cu,  data = revenue_difficulty_all)
+fit_time4 <- lm(difficulty ~  Time+Time_sq+Time_cu+Time_4th,  data = revenue_difficulty_all)
+
+fit_time_log<- lm(log_diff ~  Time+Time_sq+Time_cu+Time_4th,  data = revenue_difficulty_all)
+
+fit_time_log1<- lm(log_diff ~  Time+Time_sq+Time_cu,  data = revenue_difficulty_all)
+
+fit_time_log2<- lm(log_diff ~  Time+Time_sq,  data = revenue_difficulty_all)
+
+
+AIC(fit_time1)
+AIC(fit_time2)
+AIC(fit_time3)
+AIC(fit_time4)
+AIC(fit_time_log)
+AIC(fit_time_log1)
+AIC(fit_time_log2)
+
+
+
+
+# since the exponential model generates negative difficulty values regardless of whether the exponential term is absolute value or not, the model without the exponential term will be used
+
+fit_time <- lm(difficulty ~  Time+Time_sq+Time_cu+Time_4th,  data = revenue_difficulty_all)
+
+
+summary(fit_time)
+```
+
+# in 1 year expect difficulty to double
+# in 2 years it should double or triple
+# 1 year, 2 year, 5 year, 10 year
+# average rate of difficulty increase month to month
+
+# USE THIS CODE TO FIX OTHER MODELS
+# Logistic Model Prediction
+
+```{r}
+# Prediction for 2022
+predict_df <- data.frame(Time= 12)  %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4) 
+ diff_2022<-predict(fit_time, predict_df, type = "response")
+ diff_2022
+
+
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2022) %>% 
+  mutate(log_diff=log(difficulty))
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+exp(log_pred)
+ 
+```
+
+```{r}
+# Prediction for 2023
+predict_df <- data.frame(Time= 13) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4) 
+ diff_2023<-predict(fit_time, predict_df, type = "response")
+ diff_2023
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2023)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+```{r}
+# Prediction for 2026
+predict_df <- data.frame(Time= 16) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4)
+ diff_2026<-predict(fit_time, predict_df, type = "response")
+ diff_2026
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2026)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+```{r}
+# Prediction for 2031
+
+predict_df <- data.frame(Time= 21) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4) 
+
+
+ 
+ diff_2031<-predict(fit_time, predict_df, type = "response")
+ 
+ diff_2031
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2031)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+

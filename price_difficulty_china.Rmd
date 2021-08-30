@@ -1,0 +1,820 @@
+---
+title: "price_difficulty_china"
+author: "Casey Moser"
+date: "7/28/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "price_difficulty"
+author: "Casey Moser"
+date: "6/19/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(runjags)
+library(ProbBayes)
+```
+
+
+
+## All-time analysis
+
+
+
+# Data files
+
+```{r}
+cost<- read.csv("cost-per-transaction_chin.csv")
+fees<- read.csv("fees-usd-per-transaction_chin.csv")
+revenue<- read.csv("miners-revenue_chin.csv")
+difficulty<- read.csv("difficulty_chin.csv")
+price<- read.csv("market-price_chin.csv")
+
+
+```
+
+```{r}
+price_difficulty <- price %>%
+left_join(difficulty) %>%
+select(difficulty, market.price, Timestamp)
+
+
+```
+```{r}
+
+price_difficulty <- price_difficulty %>%
+  na_if("") %>%
+  na.omit
+head(price_difficulty)
+
+
+```
+```{r}
+ggplot(data = price_difficulty, aes(x = Timestamp, y = market.price)) +
+geom_point(size=0.5) +geom_smooth()
+```
+```{r}
+ggplot(data = price_difficulty, aes(x = Timestamp, y = difficulty)) +
+geom_point(size=0.5) +geom_smooth()
+```
+
+```{r}
+ggplot(data = price_difficulty, aes(x = difficulty, y = market.price)) + geom_text(label= price_difficulty$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+```{r}
+price_difficulty<-price_difficulty %>% 
+mutate(difficulty_sq= difficulty^2) %>% 
+mutate(difficulty_cu= difficulty^3) %>% 
+  mutate(difficulty_4th= difficulty^4) %>% 
+   mutate(difficulty_5th= difficulty^5) %>% 
+  mutate(difficulty_6th=difficulty^6)
+
+```
+
+```{r}
+fit_2_cu <- lm(market.price ~ difficulty_cu + difficulty_sq + difficulty,  data = price_difficulty)
+
+summary(fit_2_cu)
+```
+
+```{r}
+fit_2_4th <- lm(market.price ~ difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = price_difficulty)
+
+summary(fit_2_4th)
+```
+
+```{r}
+fit_2_5th <- lm(market.price ~ difficulty_5th + difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = price_difficulty)
+
+summary(fit_2_5th)
+```
+
+```{r}
+fit_2_6th <- lm(market.price ~ difficulty_6th+ difficulty_5th + difficulty_4th + difficulty_cu + difficulty_sq + difficulty,  data = price_difficulty)
+
+summary(fit_2_6th)
+```
+
+```{r}
+AIC(fit_2_cu)
+AIC(fit_2_4th)
+AIC(fit_2_5th)
+AIC(fit_2_6th)
+```
+# Finding inflection points
+```{r}
+price_difficulty_chin<-price_difficulty
+```
+
+
+
+
+```{r}
+library(inflection)
+
+f=function(x) {(-4.114e-74)*x^6 + (2.822e-60)*x^5 + (-7.189e-47 )*x^4  + (8.484e-34)*x^3 + (-4.668e-21 )*x^2 + (1.069e-08 )*x  -2.632e+02}
+
+x= price_difficulty$difficulty
+
+y= f(x)
+
+
+# First approximation
+
+cc= check_curve (x,y); cc
+```
+
+```{r}
+ese(x,y,cc$index)
+```
+
+```{r}
+ipbese=bese (x,y, cc$index)
+ipbese$iplast
+
+```
+
+```{r}
+plot(x,y, pch=19, cex= 0.1)
+
+abline (v=ipbese$iplast, col= 'blue')
+```
+
+The inflection point of this model is approximated to be at 1.325939e+13 units of network difficulty. Based on this model, after network difficulty increases past 1.325939e+13 units, the market price of bitcoin will have a seemingly exponential rise in price with additional increases in network difficulty holding all other variables constant.
+
+# Log analysis
+
+
+```{r}
+price_difficulty <- price_difficulty %>%
+
+  mutate(log_diff= log(difficulty)) %>% 
+
+mutate(log_price= log(market.price))
+
+```
+
+```{r}
+
+price_difficulty <- price_difficulty %>%
+  na_if("-Inf") %>%
+  na.omit
+head(price_difficulty)
+
+
+```
+
+```{r}
+ggplot(data = price_difficulty, aes(x = log_diff, y =log_price )) + geom_text(label= price_difficulty$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+
+
+```{r}
+fit_log <- lm(log_price ~ log_diff,  data = price_difficulty)
+
+summary(fit_log)
+```
+
+a= 0.452862
+
+
+# Relationship between price and difficulty
+
+Based on this double log model, a 1% increase in difficulty is approximately related to a 45.29% increase in market price.
+
+
+# Predictive Model
+
+# USE THIS CODE TO FIX THE OTHER MODELS
+
+```{r}
+library(tidyverse)
+library(lubridate)
+price_difficulty<-price_difficulty %>%
+  mutate(
+    Date = ymd_hms(Timestamp),
+    Year= decimal_date(Date)
+   
+
+
+  )
+
+
+
+head(price_difficulty)
+
+```
+
+
+
+
+
+
+
+```{r}
+ggplot(data = price_difficulty, aes(x = Year, y =difficulty ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+```{r}
+library(dplyr)
+price_difficulty<-price_difficulty %>% 
+  mutate(Time= Year-Year[1])
+
+head(price_difficulty)
+  
+```
+```{r}
+ggplot(data = price_difficulty, aes(x = Time, y =difficulty ))+
+geom_point(size=0.5)+geom_smooth()
+```
+```{r}
+price_difficulty<-price_difficulty %>% 
+    mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4) %>% 
+   mutate(Time_5th=Time^5) %>% 
+     mutate(Time_6th=Time^6) %>% 
+
+  mutate(Time_exp=abs(exp(Time)))
+```
+
+
+
+
+```{r}
+fit_time1 <- lm(difficulty ~  Time+Time_exp,  data = price_difficulty)
+fit_time2 <- lm(difficulty ~  Time+Time_sq+Time_exp,  data = price_difficulty)
+fit_time3 <- lm(difficulty ~  Time+Time_sq+Time_cu,  data = price_difficulty)
+fit_time4 <- lm(difficulty ~  Time+Time_sq+Time_cu+Time_4th,  data = price_difficulty)
+fit_time5 <- lm(difficulty ~  Time+Time_sq+Time_cu+Time_4th,  data = price_difficulty)
+
+
+AIC(fit_time1)
+AIC(fit_time2)
+AIC(fit_time3)
+AIC(fit_time4)
+
+
+# since the exponential model generates negativbe difficulty values regardless of whether the exponential term is absolute value or not, the model without the exponential term will be used
+
+fit_time <- lm(difficulty ~  Time+Time_sq+Time_cu+Time_4th,  data = price_difficulty)
+
+
+
+summary(fit_time)
+```
+
+# in 1 year expect difficulty to double
+# in 2 years it should double or triple
+# 1 year, 2 year, 5 year, 10 year
+# average rate of difficulty increase month to month
+
+# USE THIS CODE TO FIX OTHER MODELS
+# Logistic Model Prediction
+
+```{r}
+# Prediction for 2022
+predict_df <- data.frame(Time= 12)  %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4) 
+ diff_2022<-predict(fit_time, predict_df, type = "response")
+ diff_2022
+
+
+```
+```{r}
+log(diff_2022)
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2022)%>%
+mutate(log_diff = log(difficulty)) 
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+ 
+
+ 
+```
+
+```{r}
+# Prediction for 2023
+predict_df <- data.frame(Time= 13) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4) 
+ diff_2023<-predict(fit_time, predict_df, type = "response")
+ diff_2023
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2023)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+  exp(log_pred)
+
+ 
+```
+
+```{r}
+# Prediction for 2026
+predict_df <- data.frame(Time= 16) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4)
+ diff_2026<-predict(fit_time, predict_df, type = "response")
+ diff_2026
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2026)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+```{r}
+# Prediction for 2031
+
+predict_df <- data.frame(Time= 21) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+  mutate(Time_4th=Time^4) 
+
+
+ 
+ diff_2031<-predict(fit_time, predict_df, type = "response")
+ 
+ diff_2031
+```
+
+```{r}
+predict_df <- data.frame(difficulty= diff_2031)%>%
+mutate(log_diff = log(difficulty)) 
+
+
+ log_pred<- predict(fit_log, predict_df, type = "response")
+ 
+ exp(log_pred)
+```
+
+
+
+
+
+# Hash rate analysis
+
+```{r}
+hash<- read.csv("hash-rate_chin.csv")
+price<- read.csv("market-price_chin.csv")
+
+```
+
+
+
+
+
+```{r}
+price_hash<- price %>%
+full_join(hash) %>%
+select(hash.rate, market.price, Timestamp)
+
+
+```
+```{r}
+price_hash<- price_hash %>%
+arrange(Timestamp)
+
+
+```
+
+
+
+```{r}
+
+price_hash<- price_hash %>%
+  na_if("") %>%
+  na.omit
+
+head(price_hash)
+
+```
+```{r}
+ggplot(data = price_hash, aes(x = hash.rate, y = market.price)) + geom_text(label= price_hash$Timestamp, size=3, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+
+```{r}
+price_hash<-price_hash %>% 
+mutate(hash_sq= hash.rate^2) %>% 
+mutate(hash_cu= hash.rate^3) %>% 
+  mutate(hash_4th= hash.rate^4) %>% 
+   mutate(hash_5th= hash.rate^5)
+```
+
+```{r}
+fit_3_cu <- lm(market.price ~ hash_cu + hash_sq + hash.rate,  data = price_hash)
+
+summary(fit_3_cu)
+```
+```{r}
+fit_3_4th <- lm(market.price ~ hash_4th+ hash_cu + hash_sq + hash.rate,  data = price_hash)
+
+summary(fit_3_4th)
+```
+```{r}
+fit_3_5th <- lm(market.price ~ hash_5th+ hash_4th+ hash_cu + hash_sq + hash.rate,  data = price_hash)
+
+summary(fit_3_5th)
+```
+
+```{r}
+AIC(fit_3_cu)
+AIC(fit_3_4th)
+AIC(fit_3_5th)
+
+```
+Since the AIC values for the 4th degree model and the 5th degree model are so similar, I will err on the side of parsimony and choose the 4th degree polynomial model
+
+```{r}
+library(inflection)
+
+f=function(x) { (-2.261e-28)*x^4  + ( 1.054e-19 )*x^3 + (-1.308e-11)*x^2 + (5.715e-04 )*x  +1.186e+02 }
+
+x= price_hash$hash.rate
+
+y= f(x)
+
+
+# First approximation
+
+cc= check_curve (x,y); cc
+```
+
+```{r}
+ese(x,y, cc$index)
+```
+
+```{r}
+ipbese=bese (x,y, cc$index)
+ipbese$iplast
+
+```
+```{r}
+plot(x,y, pch=19, cex= 0.1)
+
+abline (v=ipbese$iplast, col= 'blue')
+```
+The inflection point for this model occurs when hashrate equals 59103849 TH/s. Beyond the hashrate of 59103849 TH/s, the market price begins to exponentially increase.
+
+# Logarithmic Analysis
+
+```{r}
+price_hash<- price_hash %>%
+
+  mutate(log_price= log(market.price)) %>% 
+
+mutate(log_hash= log(hash.rate))
+
+```
+
+```{r}
+
+price_hash<- price_hash %>%
+  na_if("-Inf") %>%
+  na.omit
+head(price_hash)
+
+
+```
+
+```{r}
+ggplot(data = price_hash, aes(x = log_hash, y =log_price )) + geom_text(label= price_hash$Timestamp, size=2, check_overlap = TRUE)+
+geom_point(size=0.5) +geom_smooth()
+```
+```{r}
+fit_log1 <- lm(log_price ~ log_hash,  data = price_hash)
+
+summary(fit_log1)
+```
+
+
+# Predictive Model
+
+
+
+
+
+
+# Predictive Model
+
+# USE THIS CODE TO FIX THE OTHER MODELS
+
+```{r}
+library(tidyverse)
+library(lubridate)
+price_hash<-price_hash %>%
+  mutate(
+    Date = ymd_hms(Timestamp),
+    Year= decimal_date(Date)
+   
+
+
+  )
+
+
+
+head(price_hash)
+
+```
+
+
+
+
+
+
+
+```{r}
+ggplot(data = price_hash, aes(x = Year, y =hash.rate ))+
+geom_point(size=0.5)+geom_smooth()
+```
+```{r}
+ggplot(data = price_hash, aes(x = Year, y =log_hash ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+```{r}
+library(dplyr)
+price_hash<-price_hash %>% 
+  mutate(Time= Year-Year[1])
+
+
+```
+
+```{r}
+ggplot(data = price_hash, aes(x = Time, y =hash.rate ))+
+geom_point(size=0.5)+geom_smooth()
+```
+
+```{r}
+price_hash<-price_hash %>% 
+    mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4) %>% 
+   mutate(Time_5th=Time^5) %>% 
+     mutate(Time_6th=Time^6) %>% 
+  mutate(abs_Time_sq=abs(Time^2)) %>% 
+  mutate(abs_Time_cu=abs(Time^3)) %>% 
+   mutate(abs_Time_4th=abs(Time^4)) %>% 
+   mutate(abs_Time_5th=abs(Time^5)) %>% 
+     mutate(abs_Time_6th=abs(Time^6)) %>% 
+  mutate(Time_exp=exp(Time))
+```
+
+```{r}
+fit_time1 <- lm(hash.rate ~  Time+Time_exp,  data = price_hash)
+fit_time2 <- lm(hash.rate ~  Time+Time_sq+Time_exp,  data = price_hash)
+fit_time3 <- lm(hash.rate ~  Time+Time_sq+Time_cu,  data = price_hash)
+fit_time4 <- lm(hash.rate ~  Time+Time_sq+Time_cu+Time_4th,  data = price_hash)
+fit_time5 <- lm(hash.rate ~  Time+Time_sq+Time_cu+Time_4th+Time_5th+Time_exp,  data = price_hash)
+
+fit_time6 <- lm(hash.rate ~  Time+Time_sq+Time_cu+Time_5th+Time_6th+Time_exp,  data = price_hash)
+
+AIC(fit_time1)
+AIC(fit_time2)
+AIC(fit_time3)
+AIC(fit_time4)
+AIC(fit_time5)
+AIC(fit_time6)
+
+
+
+# since the exponential model generates negative difficulty values regardless of whether the exponential term is absolute value or not, the model without the exponential term will be used
+
+fit_time <- lm(hash.rate ~  Time+Time_sq+Time_cu+Time_4th,  data = price_hash)
+
+
+fit_time_exp <-  lm(hash.rate ~  Time+Time_exp,  data = price_hash)
+
+
+
+
+summary(fit_time)
+```
+
+
+
+
+
+# in 1 year expect difficulty to double
+# in 2 years it should double or triple
+# 1 year, 2 year, 5 year, 10 year
+# average rate of difficulty increase month to month
+
+# USE THIS CODE TO FIX OTHER MODELS
+# Logistic Model Prediction
+
+```{r}
+# Prediction for 2022
+current<-2021-2010
+
+
+predict_df <- data.frame(Time= 12)  %>% 
+ mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4) %>% 
+   mutate(Time_5th=Time^5) %>% 
+     mutate(Time_6th=Time^6) %>% 
+  mutate(Time_exp=exp(Time))
+ hash_2022<-predict(fit_time, predict_df, type = "response")
+  hash_2022_exp<-predict(fit_time_exp, predict_df, type = "response")
+
+ 
+
+
+```
+
+
+
+```{r}
+predict_df <- data.frame(hash.rate= hash_2022)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ exp(log_pred)
+
+ 
+ predict_df <- data.frame(hash.rate= hash_2022_exp)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ exp(log_pred)
+
+ 
+
+ 
+```
+
+```{r}
+# Prediction for 2023
+predict_df <- data.frame(Time= 13)  %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4) %>% 
+   mutate(Time_5th=Time^5) %>% 
+  mutate(Time_exp=exp(Time))
+ hash_2023<-predict(fit_time, predict_df, type = "response")
+  hash_2023_exp<-predict(fit_time_exp, predict_df, type = "response")
+
+
+```
+
+
+```{r}
+predict_df <- data.frame(hash.rate= hash_2023)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+#log value gets more accurate prediction, although the predicted value is lower than expected
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ exp(log_pred)
+
+ predict_df <- data.frame(hash.rate= hash_2023_exp)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+#log value gets more accurate prediction, although the predicted value is lower than expected
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ exp(log_pred)
+  
+ 
+ 
+
+ 
+
+ 
+```
+
+```{r}
+# Prediction for 2026
+
+predict_df <- data.frame(Time= 16) %>% 
+  mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4) %>% 
+   mutate(Time_5th=Time^5) %>% 
+     mutate(Time_6th=Time^6) %>% 
+  mutate(Time_exp=exp(Time))
+ hash_2026<-predict(fit_time, predict_df, type = "response")
+   hash_2026_exp<-predict(fit_time_exp, predict_df, type = "response")
+
+```
+
+```{r}
+predict_df <- data.frame(hash.rate= hash_2026)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ pred<-predict(fit_3_4th, predict_df, type = "response")
+ exp(log_pred)
+ 
+  predict_df <- data.frame(hash.rate= hash_2026_exp)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+#log value gets more accurate prediction, although the predicted value is lower than expected
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ exp(log_pred)
+  
+ 
+ 
+
+```
+
+```{r}
+# Prediction for 2031
+predict_df <- data.frame(Time= 21) %>% 
+   mutate(Time_sq=Time^2) %>% 
+  mutate(Time_cu=Time^3) %>% 
+   mutate(Time_4th=Time^4)%>% 
+  mutate(Time_exp=exp(Time))
+   
+ 
+ hash_2031<-predict(fit_time, predict_df, type = "response")
+  hash_2031
+
+  hash_2031_exp<-predict(fit_time_exp, predict_df, type = "response")
+
+ 
+ 
+ hash_2031_exp
+ 
+ 
+```
+
+```{r}
+predict_df <- data.frame(hash.rate= hash_2031)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+
+
+
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ pred<- predict(fit_3_4th, predict_df, type = "response")
+
+ 
+ exp(log_pred)
+ 
+ 
+  
+  predict_df <- data.frame(hash.rate= hash_2031_exp)%>%
+mutate(log_hash = log(hash.rate))  %>% 
+  mutate(hash_4th = hash.rate^4) %>% 
+  mutate(hash_cu = hash.rate^3) %>% 
+  mutate(hash_sq = hash.rate^2)
+#log value gets more accurate prediction, although the predicted value is lower than expected
+ log_pred<- predict(fit_log1, predict_df, type = "response")
+ exp(log_pred)
+  
+ 
+ 
+
+
+```
+
